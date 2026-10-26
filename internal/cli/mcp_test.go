@@ -80,3 +80,50 @@ func TestMCPServerInstructions(t *testing.T) {
 		t.Errorf("instructions are %d words: they load in every session, keep them near 100", n)
 	}
 }
+
+
+func TestMCPServerStrictInputSchemaValidation(t *testing.T) {
+	c, err := client.NewInProcessClient(newMCPServer(nil, nil, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	init := mcp.InitializeRequest{}
+	init.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	init.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "0"}
+	if _, err := c.Initialize(ctx, init); err != nil {
+		t.Fatal(err)
+	}
+
+	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools.Tools) == 0 {
+		t.Fatal("expected registered tools")
+	}
+	for _, tool := range tools.Tools {
+		if tool.InputSchema.AdditionalProperties != false {
+			t.Errorf("tool %q schema AdditionalProperties = %v, want false", tool.Name, tool.InputSchema.AdditionalProperties)
+		}
+	}
+
+	// A misspelt argument (stage instead of stages) must be rejected as a tool
+	// error naming the unknown property before the handler runs.
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "build"
+	req.Params.Arguments = map[string]any{"name": "zm_x", "stage": "link"}
+	res, err := c.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected a tool error for unknown argument, got %+v", res)
+	}
+	if txt := resultText(res); !strings.Contains(txt, "stage") {
+		t.Errorf("expected error text to name unknown argument \"stage\", got %q", txt)
+	}
+}

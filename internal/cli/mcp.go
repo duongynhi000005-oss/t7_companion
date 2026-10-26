@@ -82,6 +82,8 @@ const mcpInstructions = "t7kb is a local knowledge base of the Black Ops 3 (BO3)
 func newMCPServer(st *store.Store, emb *embed.Embedder, warm bool) *server.MCPServer {
 	s := server.NewMCPServer("t7kb", Version(), server.WithToolCapabilities(false),
 		server.WithInstructions(mcpInstructions),
+		server.WithInputSchemaValidation(),
+		server.WithStrictInputSchemaDefault(),
 		server.WithRecovery()) // a panicking handler must not take the whole stdio server down
 	dir := journal.Dir()
 	for _, ts := range toolsets(st, emb) {
